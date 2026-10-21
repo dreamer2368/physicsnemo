@@ -1,0 +1,13 @@
+# Extra deps beyond physicsnemo's base install.
+h5py>=3.10
+hydra-core>=1.3
+omegaconf>=2.3
+tensorboard>=2.15
+matplotlib>=3.7
+jaxtyping>=0.2
+
+# LHS geometry sampling. Pin to <=0.9.3 because that's the last version whose
+# module exposes `import pyDOE` (upper-case) — newer PyPI releases use the
+# `pydoe` (lower-case) module name and break dataset.py's import. Hard
+# requirement; no scipy fallback (see dataset.py docstring).
+pyDOE<=0.9.3

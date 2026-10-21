@@ -1,0 +1,94 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Lid-driven cavity ArGEnT training config.
+
+defaults: [_self_]
+
+hydra:
+  run:
+    dir: ./outputs/${now:%Y-%m-%d_%H-%M-%S}
+
+# Only used by inference.py: directory written by save_checkpoint, e.g.
+# ./outputs/<run>/checkpoint_best
+checkpoint_dir: null
+
+model:
+  _target_: physicsnemo.experimental.models.argent.ArGEnTDeepONet
+  dim_op: 1              # Reynolds number
+  dim_query: 3           # (x, y, sdf)
+  dim_kv: 3              # (x, y, sdf)
+  dim_pos: 2             # only (x, y) used as RoPE coordinates
+  dim_out: 3             # (u, v, p)
+  dim_emb: 128
+  num_heads: 4
+  depth: 2
+  max_freq: 200.0
+  activation: relu
+  use_relu_mlp: false
+  use_mfnn: false
+  attention_type: cross  # only 'cross' is currently supported
+
+data:
+  # Absolute path to LidDriven_dataset_forTrain.h5 (with sibling _manifest.json).
+  # Override via: python train.py data.train_path=/path/to/LidDriven_dataset_forTrain.h5
+  train_path: ${oc.env:LIDDRIVEN_TRAIN_H5,./data/LidDriven_dataset_forTrain.h5}
+  extrapolation_path: ${oc.env:LIDDRIVEN_HALFCIRCLE_H5,./data/LidDriven_dataset_halfCircle_forExtrapolation.h5}
+  n_point_cloud_geo_rep: 3000
+  # -1 / null → auto-derive as 95th percentile of case sizes.
+  max_num_points: -1
+  # LHS geometry-cloud domain: x in [-0.6, 0.6], y in [-2.1, 0.1].
+  geometry_domain:
+    - [-0.6, 0.6]
+    - [-2.1, 0.1]
+  # Cases per batch (32 for single-GPU training). Under DDP with N ranks,
+  # divide by N to keep the same effective global batch (e.g. N=4 → 8).
+  batch_size_case: 32
+  batch_size_point: 3000  # subsample this many query points per case; null/-1 = all
+  num_workers: 2
+  # If true, each DDP rank builds an in-memory cache of only its 1/N of
+  # cases (interleaved shard) and uses a plain sampler instead of
+  # DistributedSampler. Cuts startup I/O contention on shared FS and
+  # per-rank memory ~1/N. Requires parallelized eval (which train.py
+  # provides). Ignored when world_size == 1.
+  load_shard: true
+
+training:
+  # 100k single-GPU iterations at batch_size_case=32 over 2400 train cases:
+  # steps/epoch = 2400/32 = 75, max_epochs = 100000 / 75 ≈ 1334. Under DDP with N ranks and same
+  # `max_epochs`, total data-visits stays the same (invariant); per-step LR
+  # decay adjusts via the progress-based schedule.
+  max_epochs: 1334
+  lr: 1.0e-3
+  lr_decay_rate: 0.99    # progress form: lr_decay_rate ** (400 * step/total_steps)
+  checkpoint_every_epochs: 1
+  seed: 42
+  output_dir: ./outputs
+  target_fields: [u, v, p]
+  resume: false
+
+# Only used by inference.py (not train.py). Override via Hydra CLI, e.g.
+#   python inference.py checkpoint_dir=./outputs/<run>/checkpoint_best inference.dataset=halfcircle inference.n_plot=4
+inference:
+  dataset: main               # 'main' (test split of train h5) or 'halfcircle' (extrapolation h5)
+  n_plot: 4                   # per-case solution-vs-truth plots (0 disables)
+  save_predictions: false     # write raw predictions.npz
+  output_dir: ./inference_out
+  # Directory that contains the run's GeometryPoints.h5 (defaults to the
+  # parent dir of checkpoint_dir). Override if the geometry cloud lives
+  # somewhere else (e.g., resumed run).
+  # train_output_dir: null
+
