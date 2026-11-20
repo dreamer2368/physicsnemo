@@ -168,3 +168,17 @@ training completed rather than the absolute step count.
   variants of the paper are not included.
 - The ArGEnTplus / GeoAnchor variant, the SOAP optimizer, and self-adaptive
   per-point loss weighting are not included.
+
+## Contributors
+
+The ArGEnT model and this example were contributed by:
+
+- "Kevin" Seung Whan Chung
+- Wenqian Chen
+- Andreas Robertson
+- Kyle Godbey
+- Zhi-Feng Wei
+- Michael Penwarden
+- Pratanu Roy
+- Panos Stinis
+- Yucheng Fu
